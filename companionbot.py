@@ -9,7 +9,7 @@ from PIL import Image
 import io
 
 # Render uchun Web Server
-app = Flask('')
+app = Flask('') 
 
 @app.route('/')
 def home():
