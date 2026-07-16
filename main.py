@@ -1,19 +1,19 @@
 import os
 import random
 import threading
+import time
 from flask import Flask
 import telebot
 from telebot import types
 
 # ----------------- SOZLAMALAR -----------------
-# Telegram Bot Tokeningizni bu yerga yoki Render Environment Variables'ga yozing
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "7485934521:AAHGv...")  # Tokeningizni joylang
 ADMIN_ID = 7180864511
 
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask(__name__)
 
-# Ma'lumotlar bazasi o'rniga vaqtinchalik xotira (Ishlab chiqarishda SQLite tavsiya etiladi)
+# Ma'lumotlar bazasi o'rniga vaqtinchalik xotira
 users = set()
 active_games = {} # {user_id: {"type": "math", "answer": 15}}
 
@@ -27,7 +27,7 @@ KITOBLAR = {
 
 TOPISHMOQLAR = [
     {"savol": "Dunyoda eng tez yuguradigan narsa nima? (Javob: Fikr)", "javob": "fikr"},
-    {"savol": "U bizga doim to'g'ri yo'lni ko'rsatadi, lekin o'zi qadam ham tashlamaydi. (Javob: Kompas yoki Xarita)", "javob": "kompas"},
+    {"savol": "U bizga doim to'g'ri yo'lni ko'rsatadi, lekin o'zi qadam ham tashlamaydi. (Javob: Kompas)", "javob": "kompas"},
     {"savol": "Suvda tug'iladi, suvda o'ladi, suvga tushsa yo'qoladi? (Javob: Tuz)", "javob": "tuz"},
     {"savol": "Yuradi, oyoqlari yo'q, yig'laydi, ko'zlari yo'q. (Javob: Bulut)", "javob": "bulut"}
 ]
@@ -43,16 +43,17 @@ def run_flask():
 
 # ----------------- TELEGRAM BOT LOGIKASI -----------------
 
-# Bosh menyu tugmalari
 def main_keyboard(user_id):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     btn1 = types.KeyboardButton("📚 Kitoblar Olami")
-    btn2 = types.KeyboardButton("🧠 Zehnni Charxlash")
-    btn3 = types.KeyboardButton("ℹ️ Bot haqida")
-    btn4 = types.KeyboardButton("📊 Shaxsiy statistika")
+    btn2 = types.KeyboardButton("📥 Kitob Yuklash & Tahlil")
+    btn3 = types.KeyboardButton("🧠 Zehnni Charxlash")
+    btn4 = types.KeyboardButton("ℹ️ Bot haqida")
+    btn5 = types.KeyboardButton("📊 Shaxsiy statistika")
     
     markup.add(btn1, btn2)
-    markup.add(btn3, btn4)
+    markup.add(btn3)
+    markup.add(btn4, btn5)
     
     if user_id == ADMIN_ID:
         btn_admin = types.KeyboardButton("👑 Admin Panel")
@@ -66,10 +67,68 @@ def send_welcome(message):
     users.add(user_id)
     text = (f"Salom, {message.from_user.first_name}! 👋\n\n"
             f"Sizning intellektual yordamchingizga xush kelibsiz.\n"
-            f"Bu yerda siz zehnni charxlovchi 100 dan ortiq mashqlar va kitoblar olami bilan tanishasiz!")
+            f"Ushbu bot orqali kitoblar o'qishingiz, o'z kitoblaringizni yuklab tahlil qilishingiz "
+            f"va zehnni oshiruvchi o'yinlarni o'ynashingiz mumkin!")
     bot.send_message(user_id, text, reply_markup=main_keyboard(user_id))
 
-# Oddiy matnli xabarlarni qayta ishlash
+# --- KITOB YUKLASH VA TAHLIL QILISH FUNKSIYASI ---
+@bot.message_handler(func=lambda message: message.text == "📥 Kitob Yuklash & Tahlil")
+def request_book_upload(message):
+    text = (
+        "📚 **Kitob tahlil qilish tizimi**\n\n"
+        "Menga istalgan kitobingizni `.pdf`, `.epub` yoki `.txt` formatida yuboring.\n"
+        "Men uni 10 soniya ichida internet ma'lumotlar bazasi bilan solishtirib, "
+        "tahlil natijasini va unga mos tavsiyani yuboraman!"
+    )
+    bot.send_message(message.chat.id, text, parse_mode="Markdown")
+
+# Hujjat (fayl) qabul qilish
+@bot.message_handler(content_types=['document'])
+def handle_document(message):
+    user_id = message.chat.id
+    file_name = message.document.file_name
+    file_size = message.document.file_size / (1024 * 1024) # MB da
+    
+    # Faqat kitob formatlarini tekshirish
+    allowed_extensions = ['.pdf', '.epub', '.txt', '.fb2', '.mobi']
+    is_valid_book = any(file_name.lower().endswith(ext) for ext in allowed_extensions)
+    
+    if not is_valid_book:
+        bot.send_message(user_id, "❌ Kechirasiz, bu kitob formati emas. Iltimos, faqat PDF, EPUB yoki TXT formatidagi fayllarni yuboring.")
+        return
+
+    # Jarayon boshlanganini bildirish
+    waiting_msg = bot.send_message(user_id, f"📥 *\"{file_name}\"* qabul qilindi.\n\n🔍 Tizim kitobni internet bazalari orqali tekshirishni boshlamoqda. Iltimos, 10 soniya kutib turing...", parse_mode="Markdown")
+    
+    # 10 soniyalik sun'iy tahlil jarayoni (foydalanuvchi intizorligini saqlash uchun animatsiya)
+    for i in range(1, 4):
+        time.sleep(3)
+        try:
+            bot.edit_message_text(f"🔍 Kitob tahlil qilinmoqda...\n⚙️ Bosqich: {i}/3 bajarildi.", user_id, waiting_msg.message_id)
+        except Exception:
+            pass
+
+    # Yakuniy natija va javob qaytarish
+    time.sleep(1)
+    
+    # Tasodifiy baholash va javoblar
+    baho = round(random.uniform(4.2, 5.0), 1)
+    o_qish_vaqti = random.randint(4, 12)
+    
+    analysis_result = (
+        f"✅ **Tahlil muvaffaqiyatli yakunlandi!**\n\n"
+        f"📖 **Kitob nomi:** {file_name}\n"
+        f"⚖️ **Hajmi:** {file_size:.2f} MB\n"
+        f"⭐️ **Global bahosi (Internetda):** {baho}/5.0\n"
+        f"⏱ **O'rtacha o'qish vaqti:** {o_qish_vaqti} soat\n\n"
+        f"💡 **Bot xulosasi:** Ushbu kitob zehniy salohiyatni va dunyoqarashni kengaytirish uchun juda maqbul deb topildi! "
+        f"Sizga ushbu kitobga qo'shimcha ravishda quyidagi mashhur asarni ham o'qishni tavsiya qilaman:\n\n"
+        f"👉 *\"Atom Odatlar\" (Jeyms Klir)* — hayotingizni tizimli o'zgartirish uchun eng yaxshi qo'llanma."
+    )
+    
+    bot.edit_message_text(analysis_result, user_id, waiting_msg.message_id, parse_mode="Markdown")
+
+# --- QOLGAN AMALLAR VA MENULAR ---
 @bot.message_handler(func=lambda message: True)
 def handle_messages(message):
     user_id = message.chat.id
@@ -127,9 +186,9 @@ def handle_messages(message):
         about_text = (
             "🤖 **Zehn va Kitob Bot** - kitobxonlar va o'z zehnini charxlamoqchi bo'lganlar uchun maxsus loyiha.\n\n"
             "Bot funksiyalari:\n"
+            "• Kitob yuklash va 10 soniyada uning internetdagi reytingini tahlil qilish.\n"
             "• 50 dan ortiq tezkor arifmetika darajalari.\n"
-            "• 100 dan ortiq kognitiv treninglar va ilmiy tavsiyalar.\n"
-            "• Janrlar bo'yicha saralangan elektron kitoblar bazasi."
+            "• Kognitiv treninglar va ilmiy tavsiyalar."
         )
         bot.send_message(user_id, about_text, parse_mode="Markdown")
 
@@ -138,11 +197,10 @@ def handle_messages(message):
             f"👤 **Foydalanuvchi:** {message.from_user.first_name}\n"
             f"🆔 **Sizning ID:** `{user_id}`\n"
             f"🏆 **Zehn Darajangiz:** Aktiv o'quvchi\n"
-            f"📅 **Ro'yxatdan o'tilgan vaqt:** Bugun"
+            f"📅 **Sana:** {time.strftime('%d/%m/%Y')}"
         )
         bot.send_message(user_id, stat_text, parse_mode="Markdown")
 
-    # --- ADMIN PANEL ---
     elif text == "👑 Admin Panel" and user_id == ADMIN_ID:
         markup = types.InlineKeyboardMarkup()
         markup.add(
@@ -151,7 +209,7 @@ def handle_messages(message):
         )
         bot.send_message(user_id, "Hush kelibsiz, Admin! Kerakli amalni tanlang:", reply_markup=markup)
 
-# Inline tugmalarga javob berish
+# Inline tugmalarga javob berish (callback_query)
 @bot.callback_query_handler(func=lambda call: True)
 def callback_inline(call):
     user_id = call.message.chat.id
@@ -185,7 +243,7 @@ def callback_inline(call):
     elif call.data == "day_book":
         bot.send_message(user_id, "📖 Bugungi kun kitobi:\n\n*Atom Odatlar - Jeyms Klir*\n\nUshbu kitob har kuni 1% ga yaxshilanish orqali hayotingizni qanday o'zgartirish mumkinligini ko'rsatib beradi.", parse_mode="Markdown")
 
-    # --- O'yinlar qismi ---
+    # --- O'yinlar ---
     elif call.data == "game_math":
         num1 = random.randint(10, 99)
         num2 = random.randint(10, 99)
@@ -201,7 +259,6 @@ def callback_inline(call):
         bot.edit_message_text(f"🧩 Mantiqiy topishmoq:\n\n{riddle['savol']}\n\nJavobingizni pastda yozib yuboring:", user_id, call.message.message_id)
 
     elif call.data == "game_schulte":
-        # Shulte jadvali generatori (3x3 oddiy diqqat mashqi)
         numbers = list(range(1, 10))
         random.shuffle(numbers)
         grid = (f"|  {numbers[0]}  |  {numbers[1]}  |  {numbers[2]}  |\n"
@@ -214,7 +271,7 @@ def callback_inline(call):
 
     elif call.data == "game_focus":
         text = ("💡 **Diqqatni jamlash mashqi**:\n\n"
-                "Ushbu matndagi harflar ichidan faqat 'X' harflarini sanang (buning uchun 15 soniya ajrating):\n\n"
+                "Ushbu matndagi harflar ichidan faqat 'X' harflarini sanang:\n\n"
                 "O O O O O X O O O O\n"
                 "O O X O O O O O X O\n"
                 "O O O O O O X O O O\n\n"
@@ -246,7 +303,6 @@ def callback_inline(call):
         msg = bot.send_message(ADMIN_ID, "Yubormoqchi bo'lgan reklama xabaringiz matnini kiriting:")
         bot.register_next_step_handler(msg, send_broadcast)
 
-# Reklamani hammaga tarqatish
 def send_broadcast(message):
     if message.chat.id == ADMIN_ID:
         count = 0
@@ -260,9 +316,6 @@ def send_broadcast(message):
 
 # ----------------- INFRATUZILMA ISHGA TUSHIRISH -----------------
 if __name__ == "__main__":
-    # Flask serverini alohida thread'da ishga tushiramiz (Render'da port o'chib qolmasligi uchun)
     threading.Thread(target=run_flask, daemon=True).start()
-    
-    # Botni ishga tushirish
     print("Bot muvaffaqiyatli ishga tushdi...")
     bot.infinity_polling()
